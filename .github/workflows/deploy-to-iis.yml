@@ -14,24 +14,87 @@ jobs:
       - name: Setup .NET Core
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '7.0.x'  # .NET Core version
+          dotnet-version: '7.0.x'  # Ensure this matches your project's target framework
 
       - name: Publish .NET Core app
-        run: dotnet publish actions/aspnet6/aspnet6.csproj -c Release -o published /p:EnvironmentName=Production  # Generate web.config for IIS
+        run: dotnet publish actions/aspnet6/aspnet6.csproj --configuration Release --output ./published /p:EnvironmentName=Production
+        # Corrected syntax: --configuration, --output
+        # Ensure your .csproj is configured as a Web project (Sdk="Microsoft.NET.Sdk.Web")
 
+      - name: Verify published output (incl. web.config)
+        run: ls -R ./published
+        # This step helps confirm if web.config was generated *before* uploading
+
+      # --- OPTION 1: Continue with sshpass (Less Secure) ---
       - name: Install sshpass
-        run: sudo apt-get install sshpass  # Install sshpass to use with scp and ssh commands
+        if: success() # Only run if previous steps succeed
+        run: sudo apt-get update && sudo apt-get install -y sshpass
 
-      - name: Upload published folder to IIS Server
-        env:
-          SSH_PASS: ${{ secrets.IIS_PASSWORD }}  # Fetch password from GitHub secrets
-        run: |
-          sshpass -p "$SSH_PASS" scp -o StrictHostKeyChecking=no -r published/* ${{ secrets.IIS_USERNAME }}@${{ secrets.IIS_SERVER_IP }}:/C:/inetpub/MyApp/  # Upload files to IIS server
-
-      - name: Restart IIS
+      - name: Upload published folder to IIS Server (using sshpass)
+        if: success()
         env:
           SSH_PASS: ${{ secrets.IIS_PASSWORD }}
+          IIS_USER: ${{ secrets.IIS_USERNAME }}
+          IIS_HOST: ${{ secrets.IIS_SERVER_IP }}
+          TARGET_PATH: 'C:\inetpub\MyApp' # Use Windows path format, adjust if needed
         run: |
-          sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no ${{ secrets.IIS_USERNAME }}@${{ secrets.IIS_SERVER_IP }} "iisreset"  # Restart IIS to apply the changes
+          echo "Uploading files to ${IIS_USER}@${IIS_HOST}:${TARGET_PATH}"
+          # Use quotes around the target path, especially if it contains spaces (though inetpub usually doesn't)
+          # Use '\' for Windows paths within the scp command string. scp might need double backslashes sometimes depending on shell interpretation, but often single works. Test this.
+          # Ensure the TARGET_PATH directory *exists* on the server first.
+          sshpass -p "$SSH_PASS" scp -o StrictHostKeyChecking=no -r ./published/* "${IIS_USER}@${IIS_HOST}:${TARGET_PATH}/"
+
+      - name: Restart IIS App Pool or Site (using sshpass)
+        if: success()
+        env:
+          SSH_PASS: ${{ secrets.IIS_PASSWORD }}
+          IIS_USER: ${{ secrets.IIS_USERNAME }}
+          IIS_HOST: ${{ secrets.IIS_SERVER_IP }}
+          APP_POOL_NAME: 'MyAppPool' # IMPORTANT: Replace with your actual App Pool Name
+          # SITE_NAME: 'MySite' # Optional: Replace with your Site Name if restarting the site
+        run: |
+          echo "Restarting App Pool ${APP_POOL_NAME} on ${IIS_HOST}"
+          # Restarting the specific App Pool is usually better than iisreset
+          sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no "${IIS_USER}@${IIS_HOST}" "powershell.exe -Command Stop-WebAppPool -Name '${APP_POOL_NAME}'; Start-WebAppPool -Name '${APP_POOL_NAME}'"
+          # OR Restart the specific Site:
+          # sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no "${IIS_USER}@${IIS_HOST}" "powershell.exe -Command Restart-WebItem -PSPath 'IIS:\Sites\${SITE_NAME}'"
+          # OR if you MUST use iisreset (requires higher permissions):
+          # sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no "${IIS_USER}@${IIS_HOST}" "iisreset"
+
+      # --- OPTION 2: Using SSH Keys (More Secure - Recommended) ---
+      # 1. Generate SSH Key Pair (ssh-keygen)
+      # 2. Add Public Key (~/.ssh/id_rsa.pub) to the Windows Server's user's `~/.ssh/authorized_keys` file. Ensure SSHD is configured on Windows.
+      # 3. Add Private Key (~/.ssh/id_rsa) as a GitHub Secret (e.g., `SSH_PRIVATE_KEY`)
+
+      # - name: Setup SSH Key
+      #   if: success()
+      #   uses: webfactory/ssh-agent@v0.8.0
+      #   with:
+      #     ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      # - name: Upload published folder to IIS Server (using SSH Key)
+      #   if: success()
+      #   env:
+      #     IIS_USER: ${{ secrets.IIS_USERNAME }}
+      #     IIS_HOST: ${{ secrets.IIS_SERVER_IP }}
+      #     TARGET_PATH: 'C:\inetpub\MyApp' # Use Windows path format
+      #   run: |
+      #     echo "Uploading files to ${IIS_USER}@${IIS_HOST}:${TARGET_PATH}"
+      #     scp -o StrictHostKeyChecking=no -r ./published/* "${IIS_USER}@${IIS_HOST}:\"${TARGET_PATH}\\"" # Note escaping for quotes/backslashes if needed by shell
+
+      # - name: Restart IIS App Pool or Site (using SSH Key)
+      #   if: success()
+      #   env:
+      #     IIS_USER: ${{ secrets.IIS_USERNAME }}
+      #     IIS_HOST: ${{ secrets.IIS_SERVER_IP }}
+      #     APP_POOL_NAME: 'MyAppPool' # IMPORTANT: Replace with your actual App Pool Name
+      #     # SITE_NAME: 'MySite' # Optional: Replace with your Site Name
+      #   run: |
+      #     echo "Restarting App Pool ${APP_POOL_NAME} on ${IIS_HOST}"
+      #     ssh -o StrictHostKeyChecking=no "${IIS_USER}@${IIS_HOST}" "powershell.exe -Command Stop-WebAppPool -Name '${APP_POOL_NAME}'; Start-WebAppPool -Name '${APP_POOL_NAME}'"
+          # OR Restart Site:
+          # ssh -o StrictHostKeyChecking=no "${IIS_USER}@${IIS_HOST}" "powershell.exe -Command Restart-WebItem -PSPath 'IIS:\Sites\${SITE_NAME}'"
+          # OR iisreset:
+          # ssh -o StrictHostKeyChecking=no "${IIS_USER}@${IIS_HOST}" "iisreset"
 
 
