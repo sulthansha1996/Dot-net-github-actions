@@ -10,31 +10,31 @@ jobs:
     runs-on: ubuntu-latest  # ✅ corrected typo here
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup .NET Core
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '7.0.x'  # your version
+      - name: Setup .NET Core
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '7.0.x'  # your version
 
-    - name: Publish .NET Core app
-      run: dotnet publish -c Release -o published
+      - name: Publish .NET Core app
+        run: dotnet publish action/aspnet/YourProjectName.csproj -c Release -o published
 
-    - name: Install sshpass
-      run: sudo apt-get install sshpass
+      - name: Install sshpass
+        run: sudo apt-get install sshpass
 
-    - name: Upload published folder to IIS Server
-      env:
-        SSH_PASS: ${{ secrets.IIS_PASSWORD }}  # ✅ using IIS_PASSWORD here properly
-      run: |
-        sshpass -p "$SSH_PASS" scp -o StrictHostKeyChecking=no -r published/* ${{ secrets.IIS_USERNAME }}@${{ secrets.IIS_SERVER_IP }}:/C:/inetpub/MyApp/
+      - name: Upload published folder to IIS Server
+        env:
+          SSH_PASS: ${{ secrets.IIS_PASSWORD }}  # ✅ using IIS_PASSWORD here properly
+        run: |
+          sshpass -p "$SSH_PASS" scp -o StrictHostKeyChecking=no -r published/* ${{ secrets.IIS_USERNAME }}@${{ secrets.IIS_SERVER_IP }}:/C:/inetpub/MyApp/
 
-    - name: Restart IIS
-      env:
-        SSH_PASS: ${{ secrets.IIS_PASSWORD }}
-      run: |
-        sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no ${{ secrets.IIS_USERNAME }}@${{ secrets.IIS_SERVER_IP }} "iisreset"
+      - name: Restart IIS
+        env:
+          SSH_PASS: ${{ secrets.IIS_PASSWORD }}
+        run: |
+          sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no ${{ secrets.IIS_USERNAME }}@${{ secrets.IIS_SERVER_IP }} "iisreset"
 
 
 
