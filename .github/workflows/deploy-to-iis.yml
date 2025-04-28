@@ -1,11 +1,11 @@
 name: Deploy .NET Core app to IIS
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # Manual trigger for this workflow
 
 jobs:
   build-and-deploy:
-    runs-on: ubuntu-latest  # ✅ corrected typo here
+    runs-on: ubuntu-latest  # Using a Linux runner for deployment
 
     steps:
       - name: Checkout code
@@ -14,26 +14,24 @@ jobs:
       - name: Setup .NET Core
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '7.0.x'  # your version
+          dotnet-version: '7.0.x'  # .NET Core version
 
       - name: Publish .NET Core app
-        run: dotnet publish actions/aspnet6/aspnet6.csproj -c Release -o published
-
+        run: dotnet publish actions/aspnet6/aspnet6.csproj -c Release -o published /p:EnvironmentName=Production  # Generate web.config for IIS
 
       - name: Install sshpass
-        run: sudo apt-get install sshpass
+        run: sudo apt-get install sshpass  # Install sshpass to use with scp and ssh commands
 
       - name: Upload published folder to IIS Server
         env:
-          SSH_PASS: ${{ secrets.IIS_PASSWORD }}  # ✅ using IIS_PASSWORD here properly
+          SSH_PASS: ${{ secrets.IIS_PASSWORD }}  # Fetch password from GitHub secrets
         run: |
-          sshpass -p "$SSH_PASS" scp -o StrictHostKeyChecking=no -r published/* ${{ secrets.IIS_USERNAME }}@${{ secrets.IIS_SERVER_IP }}:/C:/inetpub/MyApp/
+          sshpass -p "$SSH_PASS" scp -o StrictHostKeyChecking=no -r published/* ${{ secrets.IIS_USERNAME }}@${{ secrets.IIS_SERVER_IP }}:/C:/inetpub/MyApp/  # Upload files to IIS server
 
       - name: Restart IIS
         env:
           SSH_PASS: ${{ secrets.IIS_PASSWORD }}
         run: |
-          sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no ${{ secrets.IIS_USERNAME }}@${{ secrets.IIS_SERVER_IP }} "iisreset"
-
+          sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no ${{ secrets.IIS_USERNAME }}@${{ secrets.IIS_SERVER_IP }} "iisreset"  # Restart IIS to apply the changes
 
 
