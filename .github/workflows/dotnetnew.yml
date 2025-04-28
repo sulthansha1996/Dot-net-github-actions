@@ -20,9 +20,9 @@ jobs:
       - name: Publish the application
         run: dotnet publish actions/aspnet6/aspnet6.csproj --configuration Release --no-build -o ${{ github.workspace }}/publish
 
-      - name: Deploy to C:\inetpub\wwwroot\aspdotnet6
+      - name: Deploy to C:\inetpub\wwwroot
         run: |
-          $TargetPath = "C:\inetpub\wwwroot\aspdotnet6"
+          $TargetPath = "C:\inetpub\wwwroot"
           # Create directory if it doesn't exist
           if (-not (Test-Path -Path $TargetPath)) {
             New-Item -ItemType Directory -Path $TargetPath -Force
