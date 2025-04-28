@@ -19,7 +19,7 @@ jobs:
           dotnet-version: '7.0.x'  # your version
 
       - name: Publish .NET Core app
-        run: dotnet publish action/aspnet/YourProjectName.csproj -c Release -o published
+        run: dotnet publish action/aspnet6/YourProjectName.csproj -c Release -o published
 
       - name: Install sshpass
         run: sudo apt-get install sshpass
