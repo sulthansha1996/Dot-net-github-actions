@@ -5,7 +5,7 @@ on:
  
 jobs:
   deploy:
-    runs-on: [self-hosted, my-server]  # Targets Windows self-hosted runners
+    runs-on: [self-hosted, X64, Windows]  # Targets Windows self-hosted runners
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
