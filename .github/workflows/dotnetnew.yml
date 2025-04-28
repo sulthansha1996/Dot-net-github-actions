@@ -36,12 +36,4 @@ jobs:
           Write-Host "Files deployed successfully to $TargetPath"
         shell: powershell
 
-        run: |
-          Import-Module WebAdministration -ErrorAction SilentlyContinue
-          if (Get-WebAppPool -Name "DefaultAppPool" -ErrorAction SilentlyContinue) {
-            Start-WebAppPool -Name "DefaultAppPool"
-            Write-Host "Application pool started"
-          }
-        shell: powershell
-        continue-on-error: true
 
