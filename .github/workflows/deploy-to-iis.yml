@@ -1,0 +1,60 @@
+name: Build and Deploy ASP.NET Core App to IIS
+
+on:
+  push:
+    branches:
+      - main  # or your deploy branch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Setup .NET Core
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '6.0.x'
+
+    - name: Publish project
+      run: |
+        cd actions/aspnet6
+        dotnet publish -c Release -o ./publish
+
+    - name: Archive the publish folder
+      run: |
+        cd actions/aspnet6
+        tar -czvf publish.tar.gz publish
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: publish-artifact
+        path: actions/aspnet6/publish.tar.gz
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+    - name: Download artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: publish-artifact
+
+    - name: Install SSH client
+      run: sudo apt-get install openssh-client -y
+
+    - name: Copy files to IIS Server via SCP
+      run: |
+        scp -o StrictHostKeyChecking=no -i /path/to/private-key publish.tar.gz your-iis-username@your-windows-server:/path/to/iis/site/root/
+
+    - name: Extract files on server (optional via SSH)
+      run: |
+        ssh -i /path/to/private-key your-iis-username@your-windows-server "
+          cd /path/to/iis/site/root/ &&
+          tar -xzvf publish.tar.gz &&
+          Remove-Item publish.tar.gz
+        "
