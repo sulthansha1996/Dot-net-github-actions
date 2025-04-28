@@ -14,11 +14,11 @@ jobs:
         with:
           dotnet-version: 9.0.203  # Replace with your desired .NET version
       - name: Restore NuGet packages
-        run: dotnet restore
-      - name: Build the application
-        run: dotnet build --configuration Release --no-restore
+        run: dotnet restore actions/aspnet6/aspnet6.csproj
+      - name: Build the application 
+        run: dotnet build actions/aspnet6/aspnet6.csproj --configuration Release --no-restore
       - name: Publish the application
-        run: dotnet publish --configuration Release --no-build -o ${{ github.workspace }}/publish
+        run: dotnet publish actions/aspnet6/aspnet6.csproj --configuration Release --no-build -o ${{ github.workspace }}/publish
       - name: Stop IIS Application Pool (if applicable)
         run: |
           Import-Module WebAdministration -ErrorAction SilentlyContinue
