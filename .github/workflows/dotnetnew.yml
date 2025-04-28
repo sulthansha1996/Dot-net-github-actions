@@ -1,98 +1,65 @@
-name: Deploy .NET Core app to IIS
-
+name: Deploy .NET app to Windows VM
+ 
 on:
-  workflow_dispatch:  # Manual trigger for this workflow
-
+  workflow_dispatch:  # Allows manual triggering
+ 
 jobs:
-  build-and-deploy:
-    runs-on: my-server  # Using a Linux runner for deployment
-
+  deploy:
+    runs-on: my-server  # Targets Windows self-hosted runners
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup .NET Core
-        uses: actions/setup-dotnet@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v3
         with:
-          # Ensure this matches your project's target framework (e.g., 6.0.x, 7.0.x, 8.0.x)
-          dotnet-version: '7.0.x' 
-
-      - name: Publish .NET Core app
-        # Ensure the path to your .csproj file is correct
-        # Using standard --configuration and --output flags
-        run: dotnet publish actions/aspnet6/aspnet6.csproj --configuration Release --output ./published /p:EnvironmentName=Production
-
-      - name: Verify published output (incl. web.config)
-        # This helps confirm web.config was generated before uploading
-        run: ls -R ./published
-
-      # --- Using sshpass (Less Secure) ---
-      - name: Install sshpass
-        if: success() # Only run if previous steps succeed
-        run: sudo apt-get update && sudo apt-get install -y sshpass
-
-      - name: Upload published folder to IIS Server (using sshpass)
-        if: success()
-        env:
-          SSH_PASS: ${{ secrets.IIS_PASSWORD }}
-          IIS_USER: ${{ secrets.IIS_USERNAME }}
-          IIS_HOST: ${{ secrets.IIS_SERVER_IP }}
-          # !!! IMPORTANT: Verify this path in IIS Manager !!! 
-          # Go to your 'webapp' site/application -> Basic Settings -> Physical path
-          # Examples: 'C:\inetpub\wwwroot\webapp', 'C:\inetpub\MyApp', 'C:\inetpub\wwwroot'
-          TARGET_PATH: 'C:\inetpub\wwwroot\webapp' # ADJUST THIS PATH AS NEEDED
+          dotnet-version: 9.0.203  # Replace with your desired .NET version
+      - name: Restore NuGet packages
+        run: dotnet restore
+      - name: Build the application
+        run: dotnet build --configuration Release --no-restore
+      - name: Publish the application
+        run: dotnet publish --configuration Release --no-build -o ${{ github.workspace }}/publish
+      - name: Stop IIS Application Pool (if applicable)
         run: |
-          echo "Uploading files to ${IIS_USER}@${IIS_HOST}:${TARGET_PATH}"
-          # Ensure the target directory exists on the server.
-          # Using quotes around the target path is safer.
-          sshpass -p "$SSH_PASS" scp -o StrictHostKeyChecking=no -r ./published/* "${IIS_USER}@${IIS_HOST}:${TARGET_PATH}/"
-
-      - name: Restart IIS App Pool (using sshpass)
-        if: success()
-        env:
-          SSH_PASS: ${{ secrets.IIS_PASSWORD }}
-          IIS_USER: ${{ secrets.IIS_USERNAME }}
-          IIS_HOST: ${{ secrets.IIS_SERVER_IP }}
-          # Set the correct App Pool Name found in IIS Manager
-          APP_POOL_NAME: 'DefaultAppPool' 
+          Import-Module WebAdministration -ErrorAction SilentlyContinue
+          if (Get-WebAppPool -Name "DefaultAppPool" -ErrorAction SilentlyContinue) {
+            Stop-WebAppPool -Name "DefaultAppPool"
+            Write-Host "Application pool stopped"
+          } else {
+            Write-Host "Application pool not found or already stopped"
+          }
+        shell: powershell
+        continue-on-error: true
+      - name: Deploy to target directory
         run: |
-          echo "Restarting App Pool '${APP_POOL_NAME}' on ${IIS_HOST}"
-          # Explicitly import WebAdministration module for reliability in remote sessions
-          # Use escaped quotes (\") for the PowerShell command string within the YAML run block
-          sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no "${IIS_USER}@${IIS_HOST}" "powershell.exe -Command \"Import-Module WebAdministration; Stop-WebAppPool -Name '${APP_POOL_NAME}'; Start-WebAppPool -Name '${APP_POOL_NAME}'\""
-
-# --- OPTION: Using SSH Keys (More Secure - Recommended) ---
-#      Steps:
-#      1. Generate SSH Key Pair (ssh-keygen) on a Linux machine or using WSL/Git Bash.
-#      2. Add the Public Key (~/.ssh/id_rsa.pub content) to the Windows Server user's `C:\Users\YourUser\.ssh\authorized_keys` file.
-#         (Ensure the .ssh folder and authorized_keys file have correct permissions, and SSHD is running on Windows).
-#      3. Add the Private Key (~/.ssh/id_rsa content) as a GitHub Secret named `SSH_PRIVATE_KEY`.
-
-#      - name: Setup SSH Key
-#        if: success()
-#        uses: webfactory/ssh-agent@v0.8.0
-#        with:
-#          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-#      - name: Upload published folder to IIS Server (using SSH Key)
-#        if: success()
-#        env:
-#          IIS_USER: ${{ secrets.IIS_USERNAME }}
-#          IIS_HOST: ${{ secrets.IIS_SERVER_IP }}
-#          # !!! IMPORTANT: Verify this path in IIS Manager !!!
-#          TARGET_PATH: 'C:\inetpub\wwwroot\webapp' # ADJUST THIS PATH AS NEEDED
-#        run: |
-#          echo "Uploading files to ${IIS_USER}@${IIS_HOST}:${TARGET_PATH}"
-#          scp -o StrictHostKeyChecking=no -r ./published/* "${IIS_USER}@${IIS_HOST}:\"${TARGET_PATH}\\"" # Note escaping for quotes/backslashes
-
-#      - name: Restart IIS App Pool (using SSH Key)
-#        if: success()
-#        env:
-#          IIS_USER: ${{ secrets.IIS_USERNAME }}
-#          IIS_HOST: ${{ secrets.IIS_SERVER_IP }}
-#          # Set the correct App Pool Name found in IIS Manager
-#          APP_POOL_NAME: 'DefaultAppPool'
-#        run: |
-#          echo "Restarting App Pool '${APP_POOL_NAME}' on ${IIS_HOST}"
-#          # Explicitly import WebAdministration module
-#          ssh -o StrictHostKeyChecking=no "${IIS_USER}@${IIS_HOST}" "powershell.exe -Command \"Import-Module WebAdministration; Stop-WebAppPool -Name '${APP_POOL_NAME}'; Start-WebAppPool -Name '${APP_POOL_NAME}'\""
+          $TargetPath = "C:\inetpub\wwwroot\apsdotnet6"
+          # Create directory if it doesn't exist
+          if (-not (Test-Path -Path $TargetPath)) {
+            New-Item -ItemType Directory -Path $TargetPath -Force
+            Write-Host "Target directory created"
+          }
+          # Clean existing files
+          Remove-Item -Path "$TargetPath\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Write-Host "Target directory cleaned"
+          # Copy new files
+          Copy-Item -Path "${{ github.workspace }}\publish\*" -Destination $TargetPath -Recurse -Force
+          Write-Host "Files deployed successfully to $TargetPath"
+        shell: powershell
+      - name: Start IIS Application Pool (if applicable)
+        run: |
+          Import-Module WebAdministration -ErrorAction SilentlyContinue
+          if (Get-WebAppPool -Name "DefaultAppPool" -ErrorAction SilentlyContinue) {
+            Start-WebAppPool -Name "DefaultAppPool"
+            Write-Host "Application pool started"
+          }
+        shell: powershell
+        continue-on-error: true
+      - name: Verify deployment
+        run: |
+          if (Test-Path -Path "C:\inetpub\wwwroot\aspdotnet6\*.dll") {
+            Write-Host "Deployment verified successfully!"
+          } else {
+            Write-Host "Deployment verification failed - no DLL files found"
+            exit 1
+          }
+        shell: powershell
